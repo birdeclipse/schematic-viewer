@@ -21,11 +21,12 @@ function activate(context) {
       panel.webview.options = { enableScripts: true, localResourceRoots: [root] };
       panel.webview.html = html(panel.webview, root);
       const send = () => panel.webview.postMessage({ type: 'load', text: document.getText() });
+      let timer;   // one full re-parse + ELK layout per keystroke is too much on a 14k-line macro
       const subs = [
         panel.webview.onDidReceiveMessage(m => { if (m.type === 'ready') send(); }),
-        vscode.workspace.onDidChangeTextDocument(e => { if (e.document === document) send(); }),
+        vscode.workspace.onDidChangeTextDocument(e => { if (e.document === document) { clearTimeout(timer); timer = setTimeout(send, 400); } }),
       ];
-      panel.onDidDispose(() => subs.forEach(s => s.dispose()));
+      panel.onDidDispose(() => { clearTimeout(timer); subs.forEach(s => s.dispose()); });
     },
   }, { webviewOptions: { retainContextWhenHidden: true } }));
 

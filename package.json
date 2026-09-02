@@ -2,32 +2,74 @@
   "name": "schematic-viewer",
   "displayName": "SPICE Schematic Viewer",
   "description": "Draw SPICE/CDL netlists as CMOS schematics: pull-up over pull-down, hierarchy navigation, SRAM/latch/level-shifter cores.",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "publisher": "birdeclipse",
   "license": "MIT",
-  "repository": { "type": "git", "url": "https://github.com/birdeclipse/schematic-viewer.git" },
-  "engines": { "vscode": "^1.85.0" },
-  "categories": ["Visualization"],
-  "keywords": ["spice", "cdl", "netlist", "schematic", "cmos"],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/birdeclipse/schematic-viewer.git"
+  },
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "Visualization"
+  ],
+  "keywords": [
+    "spice",
+    "cdl",
+    "netlist",
+    "schematic",
+    "cmos"
+  ],
   "main": "./extension.js",
-  "activationEvents": ["onCustomEditor:schematicViewer.netlist", "onCommand:schematicViewer.open"],
+  "activationEvents": [
+    "onCustomEditor:schematicViewer.netlist",
+    "onCommand:schematicViewer.open"
+  ],
   "contributes": {
-    "languages": [{ "id": "spice", "aliases": ["SPICE", "CDL"], "extensions": [".spi", ".sp", ".cdl", ".cir", ".spice", ".ckt", ".net"] }],
-    "customEditors": [{
-      "viewType": "schematicViewer.netlist",
-      "displayName": "Schematic Viewer",
-      "selector": [{ "filenamePattern": "*.{spi,sp,cdl,cir,spice,ckt,net}" }],
-      "priority": "option"
-    }],
-    "commands": [{ "command": "schematicViewer.open", "title": "Open as Schematic", "category": "Schematic Viewer", "icon": "$(circuit-board)" }],
+    "customEditors": [
+      {
+        "viewType": "schematicViewer.netlist",
+        "displayName": "Schematic Viewer",
+        "selector": [
+          {
+            "filenamePattern": "*.{spi,sp,cdl,cir,spice,ckt,net}"
+          }
+        ],
+        "priority": "option"
+      }
+    ],
+    "commands": [
+      {
+        "command": "schematicViewer.open",
+        "title": "Open as Schematic",
+        "category": "Schematic Viewer",
+        "icon": "$(circuit-board)"
+      }
+    ],
     "menus": {
-      "editor/title": [{ "command": "schematicViewer.open", "when": "resourceLangId == spice", "group": "navigation" }],
-      "explorer/context": [{ "command": "schematicViewer.open", "when": "resourceLangId == spice", "group": "navigation" }]
+      "editor/title": [
+        {
+          "command": "schematicViewer.open",
+          "when": "resourceExtname =~ /\\.(spi|sp|cdl|cir|spice|ckt|net)$/i",
+          "group": "navigation"
+        }
+      ],
+      "explorer/context": [
+        {
+          "command": "schematicViewer.open",
+          "when": "resourceExtname =~ /\\.(spi|sp|cdl|cir|spice|ckt|net)$/i",
+          "group": "navigation"
+        }
+      ]
     }
   },
   "scripts": {
     "test": "node --test test.js",
     "package": "vsce package"
   },
-  "devDependencies": { "@vscode/vsce": "^3.0.0" }
+  "devDependencies": {
+    "@vscode/vsce": "^3.0.0"
+  }
 }
