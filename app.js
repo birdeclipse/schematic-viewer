@@ -23,6 +23,9 @@
   $('file').onchange = e => loadFiles(e.target.files);
   canvas.ondragover = e => e.preventDefault();
   canvas.ondrop = e => { e.preventDefault(); loadFiles(e.dataTransfer.files); };
+  // Host embedding (VS Code webview): the extension posts the document text.
+  window.addEventListener('message', e => { if (e.data && e.data.type === 'load') load(e.data.text); });
+  if (window.acquireVsCodeApi) { document.body.classList.add('embedded'); acquireVsCodeApi().postMessage({ type: 'ready' }); }
   for (const k of Object.keys(EXAMPLES)) $('example').add(new Option(k, k));
   $('example').onchange = e => { if (e.target.value) load(EXAMPLES[e.target.value]); };
   $('showval').onchange = e => view.classList.toggle('noval', !e.target.checked);

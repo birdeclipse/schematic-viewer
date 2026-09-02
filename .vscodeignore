@@ -1,0 +1,8 @@
+.git/**
+.gitignore
+.vscodeignore
+realworld/**
+test.js
+node_modules/**
+*.vsix
+package-lock.json
