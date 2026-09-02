@@ -97,6 +97,7 @@
     if (!fromCrumb) crumbs.push(def.name);
     renderCrumbs();
     for (const a of $('tree').querySelectorAll('a')) a.classList.toggle('cur', a.dataset.cell.toLowerCase() === name.toLowerCase());
+    $('tree').querySelector('a.cur')?.scrollIntoView({ block: 'nearest' });   // descending via double-click can land off-screen
     $('detail').textContent = `${def.name} (${def.ports.join(' ')})`;
     const pwr = [...def.rails].filter(([, p]) => p === 'vcc').map(([n]) => n), gnd = [...def.rails].filter(([, p]) => p === 'gnd').map(([n]) => n);
     $('rails').textContent = def.rails.size ? `⏚ ${pwr.join(' ')} / ${gnd.join(' ')}` : '⏚ none';
@@ -112,6 +113,7 @@
     const conv = toYosys(def, netlist);
     if (!Object.keys(conv.json.modules[def.name].cells).length) {
       view.replaceChildren(Object.assign(document.createElement('pre'), { textContent: `${def.name}: nothing to draw (no devices, or only power pins)` }));
+      tf.x = 20; tf.y = 20; tf.k = 1; apply();
       return;
     }
     let skin = conv.hasMos ? SKIN : SKIN.replace('org.eclipse.elk.direction="DOWN"', 'org.eclipse.elk.direction="RIGHT"');
