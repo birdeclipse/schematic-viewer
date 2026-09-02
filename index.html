@@ -1,0 +1,63 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>SPICE schematic viewer</title>
+<style>
+  html, body { height: 100%; margin: 0; font: 13px system-ui, sans-serif; color: #222; }
+  body { display: grid; grid-template-columns: 260px 1fr; grid-template-rows: auto 1fr auto; height: 100vh; }
+  header { grid-column: 1 / 3; display: flex; gap: 12px; align-items: center; padding: 6px 10px; border-bottom: 1px solid #ccc; background: #f6f6f6; }
+  header input[type=search] { width: 160px; }
+  #rails { font-family: "Courier New", monospace; font-size: 12px; color: #285; white-space: nowrap; }
+  #crumbs a { cursor: pointer; color: #06c; }
+  #crumbs a:hover { text-decoration: underline; }
+  #crumbs span { margin: 0 4px; color: #888; }
+  aside { border-right: 1px solid #ccc; overflow: auto; padding: 6px; background: #fafafa; }
+  aside ul { list-style: none; margin: 0; padding-left: 14px; }
+  aside li > a { cursor: pointer; display: inline-block; padding: 1px 3px; border-radius: 3px; }
+  aside li > a:hover { background: #e4ecff; }
+  aside li > a.cur { background: #cddcff; font-weight: bold; }
+  aside .leaf { color: #666; }
+  aside summary { cursor: pointer; }
+  aside details > ul { padding-left: 10px; }
+  #canvas { overflow: hidden; position: relative; background: #fff; cursor: grab; }
+  #canvas.drag { cursor: grabbing; }
+  #view { position: absolute; transform-origin: 0 0; }
+  #canvas svg { overflow: visible; }
+  footer { grid-column: 1 / 3; max-height: 90px; overflow: auto; border-top: 1px solid #ccc; padding: 4px 10px; font-size: 12px; color: #a40; background: #fff8f0; }
+  footer:empty { display: none; }
+  #drop { position: absolute; inset: 0; display: grid; place-items: center; color: #888; font-size: 18px; pointer-events: none; }
+  /* net highlight: wire segments, labels, stubs of the hovered net */
+  .hl { stroke: #e33 !important; stroke-width: 2.5 !important; }
+  text.hl { fill: #e33 !important; stroke: none !important; }
+  .netname { fill: #06c; font-size: 9px; font-family: "Courier New", monospace; stroke: none; paint-order: stroke; stroke: #fff; stroke-width: 3px; }
+  [id^="cell_"] { cursor: pointer; }
+  .hier rect { fill: #f3f7ff; }
+  #detail { margin-left: auto; font-family: "Courier New", monospace; font-size: 12px; color: #444; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 40vw; }
+</style>
+</head>
+<body>
+<header>
+  <input type="file" id="file" accept=".spi,.sp,.cdl,.cir,.net,.ckt,.txt,.spice" multiple>
+  <select id="example"><option value="">examples…</option></select>
+  <input type="search" id="search" placeholder="find net / device">
+  <label><input type="checkbox" id="showval" checked> W/L</label>
+  <label title="net names, comma/space separated, * wildcard, case-insensitive; take precedence over built-in patterns">Power <input type="text" id="pwrnets" placeholder="VDD* VPWR VIRT_PWR2" size="18"></label>
+  <label title="net names, comma/space separated, * wildcard, case-insensitive">Ground <input type="text" id="gndnets" placeholder="VSS* GND VIRT_GND" size="18"></label>
+  <span id="rails" title="supplies recognised in the current cell (stubs)"></span>
+  <span id="crumbs"></span>
+  <span id="detail"></span>
+</header>
+<aside id="tree"></aside>
+<main id="canvas"><div id="view"></div><div id="drop">Open or drop a .spi / .cdl / .sp / .cir file</div></main>
+<footer id="warnings"></footer>
+<script src="vendor/elk.bundled.js"></script>
+<script src="vendor/netlistsvg.bundle.js"></script>
+<script src="skin.js"></script>
+<script src="examples.js"></script>
+<script src="spice.js"></script>
+<script src="xcouple.js"></script>
+<script src="tojson.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
