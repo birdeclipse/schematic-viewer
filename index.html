@@ -4,54 +4,116 @@
 <meta charset="utf-8">
 <title>SPICE schematic viewer</title>
 <style>
-  html, body { height: 100%; margin: 0; font: 13px system-ui, sans-serif; color: #222; }
-  body { display: grid; grid-template-columns: 260px 1fr; grid-template-rows: auto 1fr auto; height: 100vh; }
-  header { grid-column: 1 / 3; display: flex; gap: 12px; align-items: center; padding: 6px 10px; border-bottom: 1px solid #ccc; background: #f6f6f6; }
-  header input[type=search] { width: 160px; }
-  #rails { font-family: "Courier New", monospace; font-size: 12px; color: #285; white-space: nowrap; }
-  #crumbs a { cursor: pointer; color: #06c; }
-  #crumbs a:hover { text-decoration: underline; }
-  #crumbs span { margin: 0 4px; color: #888; }
-  aside { border-right: 1px solid #ccc; overflow: auto; padding: 6px; background: #fafafa; }
-  aside ul { list-style: none; margin: 0; padding-left: 14px; }
-  aside li > a { cursor: pointer; display: inline-block; padding: 1px 3px; border-radius: 3px; }
-  aside li > a:hover { background: #e4ecff; }
-  aside li > a.cur { background: #cddcff; font-weight: bold; }
-  aside .leaf { color: #666; }
-  aside summary { cursor: pointer; }
-  aside details > ul { padding-left: 10px; }
-  #canvas { overflow: hidden; position: relative; background: #fff; cursor: grab; }
+  :root {
+    --ui: system-ui, -apple-system, "Segoe UI", sans-serif;
+    --mono: ui-monospace, "SF Mono", Menlo, Consolas, "DejaVu Sans Mono", monospace;
+    --bg: #f5f6f8; --panel: #fbfbfc; --line: #dde1e6; --text: #1f2328; --muted: #6b7280;
+    --accent: #2563eb; --accent-bg: #e8effd; --grid: #e3e6ea; --grid-major: #cfd4da;
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; font: 13px/1.4 var(--ui); color: var(--text); background: var(--bg); }
+  body { display: grid; grid-template-columns: auto 1fr; grid-template-rows: auto auto 1fr auto; height: 100vh; }
+  input, select, button { font: inherit; color: inherit; }
+  input[type=text], input[type=search], select { height: 26px; padding: 0 8px; border: 1px solid var(--line); border-radius: 6px; background: #fff; }
+  input:focus-visible, select:focus-visible, button:focus-visible, a:focus-visible, summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+
+  /* toolbar */
+  header { grid-column: 1 / 3; display: flex; flex-wrap: wrap; gap: 6px 16px; align-items: center; padding: 6px 12px; border-bottom: 1px solid var(--line); background: var(--panel); }
+  header .group { display: flex; gap: 8px; align-items: center; }
+  header label { display: flex; gap: 5px; align-items: center; color: var(--muted); white-space: nowrap; }
+  header label input[type=text] { font-family: var(--mono); font-size: 12px; width: 170px; }
+  header input[type=search] { width: 200px; }
+  #file { max-width: 220px; font-size: 12px; }
+
+  /* breadcrumb bar */
+  nav#bar { grid-column: 1 / 3; display: flex; gap: 14px; align-items: center; min-height: 28px; padding: 0 12px; border-bottom: 1px solid var(--line); background: #fff; font-family: var(--mono); font-size: 12px; }
+  #crumbs { display: flex; align-items: center; gap: 2px; min-width: 0; }
+  #crumbs a { cursor: pointer; color: var(--accent); padding: 2px 4px; border-radius: 4px; white-space: nowrap; }
+  #crumbs a:hover { background: var(--accent-bg); }
+  #crumbs a:last-child { color: var(--text); font-weight: 600; }
+  #crumbs span { color: #a3a9b3; }
+  #rails { color: #15803d; white-space: nowrap; }
+  #detail { margin-left: auto; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+
+  /* hierarchy tree */
+  aside { width: 340px; min-width: 180px; max-width: 60vw; resize: horizontal; overflow: auto; border-right: 1px solid var(--line); background: var(--panel); padding: 6px 4px; font-family: var(--mono); font-size: 12px; }
+  aside ul { list-style: none; margin: 0; padding: 0; }
+  aside ul ul { margin-left: 9px; padding-left: 9px; border-left: 1px solid var(--line); }
+  aside details > summary { list-style: none; display: flex; align-items: center; cursor: pointer; }
+  aside details > summary::-webkit-details-marker { display: none; }
+  aside summary::before { content: ""; flex: none; width: 0; height: 0; margin: 0 4px 0 2px; border: 4px solid transparent; border-left: 5px solid #8b919b; transition: transform .12s; }
+  aside details[open] > summary::before { transform: rotate(90deg); }
+  aside li > a { margin-left: 15px; }
+  aside a.row { display: flex; flex: 1; min-width: 0; align-items: baseline; gap: 6px; padding: 2px 6px; border-radius: 5px; color: var(--text); text-decoration: none; white-space: nowrap; cursor: pointer; }
+  aside a.row:hover { background: #eceff3; }
+  aside a.row.cur { background: var(--accent-bg); color: var(--accent); }
+  aside .inst { flex: 0 1 auto; min-width: 35%; overflow: hidden; text-overflow: ellipsis; font-weight: 600; }
+  aside .cell { flex: 1 1 auto; min-width: 25%; overflow: hidden; text-overflow: ellipsis; color: var(--muted); }
+  aside a.row.cur .cell { color: var(--accent); opacity: .8; }
+  aside .cnt { flex: none; font-size: 10px; color: var(--muted); background: #e9ecf0; border-radius: 8px; padding: 0 6px; line-height: 15px; }
+  aside a.row.cur .cnt { background: #d3e0fb; }
+
+  /* canvas */
+  #canvas { position: relative; overflow: hidden; background: #fff; cursor: grab; }
   #canvas.drag { cursor: grabbing; }
+  #canvas.grid { background-image:
+      linear-gradient(var(--grid-major) 1px, transparent 1px), linear-gradient(90deg, var(--grid-major) 1px, transparent 1px),
+      linear-gradient(var(--grid) 1px, transparent 1px), linear-gradient(90deg, var(--grid) 1px, transparent 1px); }
   #view { position: absolute; transform-origin: 0 0; }
+  #view pre { margin: 0; padding: 12px 16px; font-family: var(--mono); font-size: 12px; color: var(--muted); background: var(--panel); border: 1px solid var(--line); border-radius: 8px; }
   #canvas svg { overflow: visible; }
-  footer { grid-column: 1 / 3; max-height: 90px; overflow: auto; border-top: 1px solid #ccc; padding: 4px 10px; font-size: 12px; color: #a40; background: #fff8f0; }
+  #tools { position: absolute; right: 12px; bottom: 12px; display: flex; gap: 2px; padding: 3px; background: #fff; border: 1px solid var(--line); border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,.08); }
+  #tools button { min-width: 28px; height: 26px; padding: 0 7px; border: 0; border-radius: 5px; background: none; cursor: pointer; font-family: var(--mono); font-size: 12px; }
+  #tools button:hover { background: #eceff3; }
+  #tools button[aria-pressed=true] { background: var(--accent-bg); color: var(--accent); }
+  #zoom { min-width: 52px; }
+  #drop { position: absolute; inset: 0; display: grid; place-items: center; color: #9aa0a6; font-size: 16px; pointer-events: none; }
+  footer { grid-column: 1 / 3; max-height: 90px; overflow: auto; border-top: 1px solid var(--line); padding: 4px 12px; font: 12px var(--mono); color: #b45309; background: #fffbeb; }
   footer:empty { display: none; }
-  #drop { position: absolute; inset: 0; display: grid; place-items: center; color: #888; font-size: 18px; pointer-events: none; }
-  /* net highlight: wire segments, labels, stubs of the hovered net */
-  .hl { stroke: #e33 !important; stroke-width: 2.5 !important; }
-  text.hl { fill: #e33 !important; stroke: none !important; }
-  .netname { fill: #06c; font-size: 9px; font-family: "Courier New", monospace; stroke: none; paint-order: stroke; stroke: #fff; stroke-width: 3px; }
+
+  /* schematic overlays */
+  .hl { stroke: #e11d48 !important; stroke-width: 2.5 !important; }
+  text.hl { fill: #e11d48 !important; stroke: none !important; }
+  .netname { fill: var(--accent); font-size: 9px; font-family: var(--mono); paint-order: stroke; stroke: #fff; stroke-width: 3px; }
   [id^="cell_"] { cursor: pointer; }
   .hier rect { fill: #f3f7ff; }
-  #detail { margin-left: auto; font-family: "Courier New", monospace; font-size: 12px; color: #444; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 40vw; }
+  .noval .val { display: none; }
   .embedded #file, .embedded #example, .embedded #drop { display: none; }
 </style>
 </head>
 <body>
 <header>
-  <input type="file" id="file" accept=".spi,.sp,.cdl,.cir,.net,.ckt,.txt,.spice" multiple>
-  <select id="example"><option value="">examples…</option></select>
-  <input type="search" id="search" placeholder="find net / device">
-  <label><input type="checkbox" id="showval" checked> W/L</label>
-  <label title="net names, comma/space separated, * wildcard, case-insensitive; take precedence over built-in patterns">Power <input type="text" id="pwrnets" placeholder="VDD* VPWR VIRT_PWR2" size="18"></label>
-  <label title="net names, comma/space separated, * wildcard, case-insensitive">Ground <input type="text" id="gndnets" placeholder="VSS* GND VIRT_GND" size="18"></label>
-  <span id="rails" title="supplies recognised in the current cell (stubs)"></span>
-  <span id="crumbs"></span>
-  <span id="detail"></span>
+  <div class="group">
+    <input type="file" id="file" accept=".spi,.sp,.cdl,.cir,.net,.ckt,.txt,.spice" multiple aria-label="Open netlist files">
+    <select id="example" aria-label="Example netlists"><option value="">Examples…</option></select>
+  </div>
+  <input type="search" id="search" placeholder="Find net / device ⏎" aria-label="Find net or device">
+  <div class="group">
+    <label><input type="checkbox" id="showval" checked> W/L</label>
+    <label><input type="checkbox" id="showgrid" checked> Grid</label>
+  </div>
+  <div class="group">
+    <label title="net names, comma/space separated, * wildcard, case-insensitive; take precedence over built-in patterns">Power <input type="text" id="pwrnets" placeholder="VDD* VPWR VIRT_PWR2"></label>
+    <label title="net names, comma/space separated, * wildcard, case-insensitive">Ground <input type="text" id="gndnets" placeholder="VSS* GND VIRT_GND"></label>
+  </div>
 </header>
-<aside id="tree"></aside>
-<main id="canvas"><div id="view"></div><div id="drop">Open or drop a .spi / .cdl / .sp / .cir file</div></main>
-<footer id="warnings"></footer>
+<nav id="bar" aria-label="Cell path">
+  <span id="crumbs"></span>
+  <span id="rails" title="supplies recognised in the current cell (stubs)"></span>
+  <span id="detail"></span>
+</nav>
+<aside id="tree" aria-label="Hierarchy"></aside>
+<main id="canvas">
+  <div id="view"></div>
+  <div id="drop">Open or drop a .spi / .cdl / .sp / .cir file</div>
+  <div id="tools" role="toolbar" aria-label="View">
+    <button id="zoomout" aria-label="Zoom out">−</button>
+    <button id="zoom" aria-label="Reset zoom to 100%">100%</button>
+    <button id="zoomin" aria-label="Zoom in">+</button>
+    <button id="fit" aria-label="Fit to window (f)">Fit</button>
+  </div>
+</main>
+<footer id="warnings" role="status"></footer>
 <script src="vendor/elk.bundled.js"></script>
 <script src="vendor/netlistsvg.bundle.js"></script>
 <script src="skin.js"></script>

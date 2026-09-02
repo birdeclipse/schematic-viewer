@@ -12,7 +12,7 @@ const SKIN = String.raw`<svg xmlns="http://www.w3.org/2000/svg"
   </s:properties>
 <style>
 svg { stroke: #000; fill: none; }
-text { fill: #000; stroke: none; font-size: 10px; font-family: "Courier New", monospace; }
+text { fill: #000; stroke: none; font-size: 10px; font-family: ui-monospace, "SF Mono", Menlo, Consolas, "Courier New", monospace; }
 .ref { font-weight: bold; }
 .val { fill: #555; font-size: 9px; }
 .nodelabel { text-anchor: middle; }

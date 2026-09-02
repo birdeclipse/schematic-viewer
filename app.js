@@ -43,26 +43,32 @@
     };
   }
   SPICE.setRailPatterns(globs($('pwrnets').value), globs($('gndnets').value));
-  document.head.appendChild(Object.assign(document.createElement('style'), { textContent: '.noval .val{display:none}' }));
 
   // ---------- hierarchy tree ----------
   // Children grouped by sub-circuit (an array of 8192 bitcells is one row), expanded on demand.
   function buildTree() {
     const sub = n => netlist.subckts[n.toLowerCase()];
-    const item = (label, cellName) => {
-      const li = document.createElement('li');
+    // Row: [instance name] [cell name, truncated] [device count]; full text in the tooltip.
+    const row = (inst, cellName, count) => {
       const a = document.createElement('a');
-      a.textContent = label;
+      a.className = 'row';
+      a.href = '#';
       a.dataset.cell = cellName;
+      a.title = inst ? `${inst} : ${cellName}` : cellName;
       a.onclick = e => { e.preventDefault(); crumbs = []; show(cellName); };
+      if (inst) a.appendChild(Object.assign(document.createElement('span'), { className: 'inst', textContent: inst }));
+      a.appendChild(Object.assign(document.createElement('span'), { className: 'cell', textContent: cellName }));
+      const def = sub(cellName);
+      if (def) a.appendChild(Object.assign(document.createElement('span'), { className: 'cnt', textContent: count > 1 ? `×${count} · ${def.instances.length}` : String(def.instances.length), title: `${count > 1 ? count + ' instances, ' : ''}${def.instances.length} devices in ${cellName}` }));
+      return a;
+    };
+    const item = (inst, cellName, count = 1) => {
+      const li = document.createElement('li');
+      const a = row(inst, cellName, count);
       const def = sub(cellName);
       const groups = new Map();   // child model -> [instance names]
       if (def) for (const i of def.instances) if (i.kind === 'X' && sub(i.model)) (groups.get(i.model) ?? groups.set(i.model, []).get(i.model)).push(i.name);
-      if (!groups.size) {
-        li.appendChild(a);
-        if (def) a.insertAdjacentHTML('afterend', ` <span class="leaf">(${def.instances.length} dev)</span>`);
-        return li;
-      }
+      if (!groups.size) { li.appendChild(a); return li; }
       const details = document.createElement('details');
       const summary = document.createElement('summary');
       summary.appendChild(a);
@@ -70,14 +76,14 @@
       details.addEventListener('toggle', () => {
         if (!details.open || details.children.length > 1) return;
         const ul = document.createElement('ul');
-        for (const [model, names] of groups) ul.appendChild(item(names.length > 1 ? `${names[0]} … ×${names.length} : ${model}` : `${names[0]} : ${model}`, model));
+        for (const [model, names] of groups) ul.appendChild(item(names.length > 1 ? `${names[0]}…` : names[0], model, names.length));
         details.appendChild(ul);
       });
       li.appendChild(details);
       return li;
     };
     const ul = document.createElement('ul');
-    for (const t of netlist.tops) ul.appendChild(item(t, t));
+    for (const t of netlist.tops) ul.appendChild(item('', t));
     $('tree').replaceChildren(ul);
     ul.querySelector('details')?.toggleAttribute('open', true);
   }
@@ -208,7 +214,21 @@
 
   // ---------- pan / zoom ----------
   const tf = { x: 20, y: 20, k: 1 };
-  const apply = () => { view.style.transform = `translate(${tf.x}px,${tf.y}px) scale(${tf.k})`; };
+  const GRID = 10;   // schematic units; major line every 10 cells
+  const apply = () => {
+    view.style.transform = `translate(${tf.x}px,${tf.y}px) scale(${tf.k})`;
+    const s = GRID * tf.k, m = s * 10;   // grid drawn in screen space, anchored to the schematic origin
+    canvas.style.backgroundSize = `${m}px ${m}px, ${m}px ${m}px, ${s}px ${s}px, ${s}px ${s}px`;
+    canvas.style.backgroundPosition = `${tf.x}px ${tf.y}px`;
+    $('zoom').textContent = `${Math.round(tf.k * 100)}%`;
+  };
+  // Zoom by factor f about canvas point (mx, my)
+  const zoomAt = (f, mx = canvas.clientWidth / 2, my = canvas.clientHeight / 2) => {
+    tf.x = mx - (mx - tf.x) * f;
+    tf.y = my - (my - tf.y) * f;
+    tf.k *= f;
+    apply();
+  };
   function fit() {
     const svg = view.querySelector('svg');
     if (!svg) return;
@@ -221,15 +241,17 @@
   canvas.addEventListener('wheel', e => {
     e.preventDefault();
     const r = canvas.getBoundingClientRect();
-    const mx = e.clientX - r.left, my = e.clientY - r.top;
-    const f = Math.exp(-e.deltaY * 0.002);
-    tf.x = mx - (mx - tf.x) * f;
-    tf.y = my - (my - tf.y) * f;
-    tf.k *= f;
-    apply();
+    zoomAt(Math.exp(-e.deltaY * 0.002), e.clientX - r.left, e.clientY - r.top);
   }, { passive: false });
+  $('zoomin').onclick = () => zoomAt(1.25);
+  $('zoomout').onclick = () => zoomAt(0.8);
+  $('zoom').onclick = () => zoomAt(1 / tf.k);
+  $('fit').onclick = fit;
+  $('showgrid').onchange = e => canvas.classList.toggle('grid', e.target.checked);
+  canvas.classList.toggle('grid', $('showgrid').checked);
+  apply();
   let drag = null;
-  canvas.addEventListener('pointerdown', e => { if (e.button === 0) { drag = { x: e.clientX - tf.x, y: e.clientY - tf.y }; canvas.classList.add('drag'); } });
+  canvas.addEventListener('pointerdown', e => { if (e.button === 0 && !e.target.closest('#tools')) { drag = { x: e.clientX - tf.x, y: e.clientY - tf.y }; canvas.classList.add('drag'); } });
   window.addEventListener('pointermove', e => { if (drag) { tf.x = e.clientX - drag.x; tf.y = e.clientY - drag.y; apply(); } });
   window.addEventListener('pointerup', () => { drag = null; canvas.classList.remove('drag'); });
   window.addEventListener('resize', fit);
