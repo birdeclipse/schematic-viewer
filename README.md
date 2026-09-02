@@ -24,6 +24,12 @@ or right-click the file → *Open With…* → *Schematic Viewer*. The view foll
 Header controls: **Power** / **Ground** name lists (`VDD* VPWR`, `*` wildcard) override supply detection,
 `⏚` shows which nets the current cell treats as supplies, search jumps to a net or device, `f` fits to window.
 
+## Docs
+
+- [docs/architecture.md](docs/architecture.md) — pipeline, why ELK yields the CMOS layout, cross-coupled cores, supply resolution, known ceilings
+- [docs/netlist-support.md](docs/netlist-support.md) — supported syntax, element cards, MOS typing, supply names
+- [AGENTS.md](AGENTS.md) — conventions and verification steps for contributors and coding agents
+
 ## Tests
 
 ```
