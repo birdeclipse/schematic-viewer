@@ -75,7 +75,7 @@
   .hl { stroke: #e11d48 !important; stroke-width: 2.5 !important; }
   text.hl { fill: #e11d48 !important; stroke: none !important; }
   .netname { fill: var(--accent); font-size: 9px; font-family: var(--mono); paint-order: stroke; stroke: #fff; stroke-width: 3px; }
-  [id^="cell_"] { cursor: pointer; }
+  [id^="cell_"] { cursor: move; }
   .hier rect { fill: #f3f7ff; }
   .noval .val { display: none; }
   .embedded #file, .embedded #example, .embedded #drop { display: none; }
@@ -105,7 +105,7 @@
 <aside id="tree" aria-label="Hierarchy"></aside>
 <main id="canvas">
   <div id="view"></div>
-  <div id="drop">Open or drop a .spi / .cdl / .sp / .cir file</div>
+  <div id="drop">Open or drop a .spi / .cdl / .sp / .cir file<br><small>drag a device to move it · shift-drag to re-layout around it</small></div>
   <div id="tools" role="toolbar" aria-label="View">
     <button id="zoomout" aria-label="Zoom out">−</button>
     <button id="zoom" aria-label="Reset zoom to 100%">100%</button>
@@ -121,6 +121,7 @@
 <script src="spice.js"></script>
 <script src="xcouple.js"></script>
 <script src="tojson.js"></script>
+<script src="layout.js"></script>
 <script src="app.js"></script>
 </body>
 </html>

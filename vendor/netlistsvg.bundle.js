@@ -1396,8 +1396,7 @@ function render(skinData, yosysNetlist, done, elkData) {
     // if we already have a layout then use it
     if (elkData) {
         promise = new Promise(function (resolve) {
-            drawModule_1.default(elkData, flatModule);
-            resolve();
+            resolve(drawModule_1.default(elkData, flatModule));   /* schematic-viewer patch: upstream resolved undefined */
         });
     }
     else {
@@ -1438,16 +1437,17 @@ const schema = Buffer("ewogICJkZXNjcmlwdGlvbiI6ICJKU09OIFNjaGVtYSBZb3N5cyBuZXRsa
 const exampleDigitalJson = json5.parse(exampleDigital);
 const exampleAnalogJson = json5.parse(exampleAnalog);
 
-function render(skinData, netlistData, cb) {
+function render(skinData, netlistData, cb, elkData) {
     var valid = ajv.validate(json5.parse(schema), netlistData);
     if (!valid) {
         throw Error(JSON.stringify(ajv.errors, null, 2));
     }
-    return lib.render(skinData, netlistData, cb);
+    return lib.render(skinData, netlistData, cb, elkData);
 }
 
 module.exports = {
     render: render,
+    dumpLayout: lib.dumpLayout,   /* schematic-viewer patch: expose the pre-layout ELK graph */
     digitalSkin: digital,
     analogSkin: analog,
     exampleDigital: exampleDigitalJson,

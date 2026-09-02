@@ -11,8 +11,9 @@ touching layout, rail detection, or cross-coupled cell rendering; `docs/netlist-
 | `spice.js` | Parser + per-cell supply resolution (`SPICE.parse`, `computeRails`, `setRailPatterns`) |
 | `tojson.js` | Sub-circuit → Yosys JSON for netlistsvg (`toYosys(def, netlist)`) |
 | `xcouple.js` | Cross-coupled core detector and its hand-drawn SVG symbol (`XC.find`, `XC.symbol`) |
-| `skin.js` | netlistsvg skin: MOS/rail/port/label glyphs + ELK options, as a JS string |
-| `app.js` | UI glue: tree, breadcrumb, highlight, pan/zoom/grid, host messaging |
+| `skin.js` | netlistsvg skin: MOS/rail/port/label glyphs, as a JS string |
+| `layout.js` | Row assignment, ELK run, interactive re-layout after a drag (`LAYOUT.render`) |
+| `app.js` | UI glue: tree, breadcrumb, highlight, pan/zoom/grid, drag to place (local re-route, Shift = ELK re-layout), host messaging |
 | `extension.js` | VS Code custom editor; rewrites `index.html` script tags to webview URIs |
 | `examples.js` | Built-in example netlists, also test fixtures |
 | `test.js` | `node --test`; uses `realworld/openram_1kb.sp` as a fixture |
@@ -28,7 +29,7 @@ Keep that dual shape: tests run the pipeline in Node without a browser.
 
 ## Verify in the browser
 
-`node --test` proves parsing and graph shape, not what the schematic looks like. After changing `skin.js`, `xcouple.js`,
+`node --test` proves parsing, graph shape and row alignment, not what the schematic looks like. After changing `skin.js`, `xcouple.js`,
 `tojson.js`, or `index.html` CSS, open `index.html` headless, render at least `nand2`, `sram6t`, `levelshifter`,
 `powergate` and the OpenRAM `sense_amp` / `dp_cell`, and look at the screenshots. Element IDs in `index.html`
 (`#tree #view #canvas #crumbs #detail #rails #warnings #file #example …`) are the contract `app.js` and the
@@ -36,9 +37,13 @@ extension rely on.
 
 ## Gotchas
 
-- Layout is ELK's, not ours: PUN-over-PDN falls out of `direction=DOWN` plus port sides in the skin. Gate nets are
-  drawn as text on the symbol and rails as per-pin stubs so each CMOS stage is its own connected component. Reconnect
-  either as a wire and stages collapse into one blob.
+- Rows are ours, the rest is ELK's: `layout.js: rows` puts VDD stubs on row 0, PMOS counted from VDD, NMOS counted
+  from VSS, VSS stubs on the last row, and hands them to ELK as positions (`layering.strategy=INTERACTIVE`). Do not
+  reach for ELK's `layerConstraint`/`priority.shortness` instead: its network-simplex layering re-balances nodes with
+  equal in/out degree into the emptiest layer and ignores weights. Gate nets are drawn as text on the symbol and
+  rails as per-pin stubs; reconnect either as a wire and stages collapse into one blob.
+- `vendor/netlistsvg.bundle.js` has two marked one-line patches (`elkData` pass-through, `dumpLayout` export);
+  re-apply them if the bundle is refreshed. `vendor/elk.bundled.js` is elkjs 0.9.3.
 - Skin glyph widths (`s:width`) are laid out by ELK before text is measured; widening a label means widening the glyph.
 - Supplies are per cell (`def.rails`), not global. A net can be a stub in one cell and a switched wire in its parent.
 - The webview CSP needs `'unsafe-eval'`: the vendored netlistsvg bundle calls `Function()` at load.

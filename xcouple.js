@@ -1,6 +1,7 @@
 // Cross-coupled cores (SRAM cell, sense amp, latch, clocked-inverter latch, level-shifter PMOS
 // pair) drawn textbook style: two stacks facing each other, feedback wires between them, pass
-// transistors horizontal on the outer sides, shared tail devices exposed as a port.
+// transistors horizontal on the outer sides, shared tail devices and rail chain ends exposed as
+// pins (the rail stubs come from ELK, on the cell's shared VDD/VSS rows).
 // find() picks the devices, symbol() emits a netlistsvg skin glyph.
 const XC = (() => {
   const railOf = t => (t === 'pmos' ? 'vcc' : 'gnd');
@@ -155,7 +156,7 @@ const XC = (() => {
     const xbR = xbL + MW;                          // right gate bar
     const W = xbR + 5 + R.stackW + R.passW;
     const yN = NODE_Y + SER_DY * DN + 10;          // bottom of the lowest N glyph
-    const H = Math.max(yN + 34, L.yQ + 12, R.yQ + 12, c.tail.nmos ? yN + 40 : 0);
+    const H = Math.max(yN + 20, L.yQ + 12, R.yQ + 12, c.tail.nmos ? yN + 40 : 0);
     const out = [], pins = [];
 
     // ---- stacks: columns laid out from the gate bar outward ----
@@ -190,8 +191,10 @@ const XC = (() => {
           if (S.columns.length > 1 || S.pass.length || S.use || S.port) out.push(dot(t, NODE_Y, S.node));
           const last = ch[ch.length - 1];
           if (ch.tail) out.push(wire(isP ? `M${t},${gyEnd} V28` : `M${t},${gyEnd + 40} V${yN + 12}`, last.s));
-          else if (isP) out.push(wire(`M${t - 8},${gyEnd - 22} H${t + 8} L${t},${gyEnd - 12} Z M${t},${gyEnd - 12} V${gyEnd}`, last.s), text(t, gyEnd - 26, last.s, 'ref', 'middle', last.s));
-          else out.push(wire(`M${t},${gyEnd + 40} V${gyEnd + 50} M${t - 8},${gyEnd + 50} H${t + 8} M${t - 5},${gyEnd + 55} H${t + 5} M${t - 2},${gyEnd + 60} H${t + 2}`, last.s), text(t + 12, gyEnd + 64, last.s, 'ref', 'start', last.s));
+          else {                                   // rail (or open) end: a pin on the glyph edge, ELK adds the stub
+            out.push(wire(isP ? `M${t},0 V${gyEnd}` : `M${t},${gyEnd + 40} V${H}`, last.s));
+            pins.push({ pid: `${isP ? 'P' : 'N'}${k}${i}`, net: last.s, x: t, y: isP ? 0 : H, position: isP ? 'top' : 'bottom' });
+          }
         }
         x = k ? gx + 36 + col.labelW + 6 : gx - 6 - col.labelW - 6;
       });

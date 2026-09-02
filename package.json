@@ -2,7 +2,7 @@
   "name": "schematic-viewer",
   "displayName": "SPICE Schematic Viewer",
   "description": "Draw SPICE/CDL netlists as CMOS schematics: pull-up over pull-down, hierarchy navigation, SRAM/latch/level-shifter cores.",
-  "version": "0.1.2",
+  "version": "0.2.1",
   "publisher": "birdeclipse",
   "license": "MIT",
   "repository": {

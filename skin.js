@@ -1,15 +1,8 @@
 const SKIN = String.raw`<svg xmlns="http://www.w3.org/2000/svg"
      xmlns:xlink="http://www.w3.org/1999/xlink"
      xmlns:s="https://github.com/nturley/netlistsvg">
-  <s:properties constants="false" splitsAndJoins="false" genericsLaterals="false">
-    <s:layoutEngine
-        org.eclipse.elk.direction="DOWN"
-        org.eclipse.elk.layered.spacing.nodeNodeBetweenLayers="24"
-        org.eclipse.elk.layered.compaction.postCompaction.strategy="4"
-        org.eclipse.elk.spacing.nodeNode="20"
-        org.eclipse.elk.spacing.componentComponent="50"
-        org.eclipse.elk.aspectRatio="4"/>
-  </s:properties>
+  <!-- ELK options live in layout.js; netlistsvg only reads the flags below. -->
+  <s:properties constants="false" splitsAndJoins="false" genericsLaterals="false"/>
 <style>
 svg { stroke: #000; fill: none; }
 text { fill: #000; stroke: none; font-size: 10px; font-family: ui-monospace, "SF Mono", Menlo, Consolas, "Courier New", monospace; }

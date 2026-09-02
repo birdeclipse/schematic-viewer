@@ -36,10 +36,15 @@ const toYosys = (() => {
   }
   const isDriven = (def, net) => !railOf(def, net) && (net in railDist(def).pmos || net in railDist(def).nmos);
   // Netlist D/G/S order, with D and S swapped when the drain is nearer the rail than the source.
+  // Pass devices never reach a rail: there the signal source (input port or a net some stage drives)
+  // takes the top terminal and the output-ish net the bottom, so a tgate's PMOS and NMOS agree.
+  const flow = (def, net) => isDriven(def, net) || (def.ports.includes(net) && !OUT_RE.test(net)) ? 0 : OUT_RE.test(net) || def.ports.includes(net) ? 2 : 1;
   function orient(def, i) {
     const [d, g, s] = i.pins;
     const dd = railDist(def)[i.type];
-    return d in dd && s in dd && dd[d] < dd[s] ? [s, g, d] : [d, g, s];
+    const swap = d in dd && s in dd ? dd[d] < dd[s]
+      : i.type === 'pmos' ? flow(def, d) < flow(def, s) : flow(def, s) < flow(def, d);   // top terminal: S for pmos, D for nmos
+    return swap ? [s, g, d] : [d, g, s];
   }
 
   const dirCache = new WeakMap();
@@ -138,7 +143,7 @@ const toYosys = (() => {
       const sym = XC.symbol(c, id, use, portOf, rail);
       symbols.push(sym.svg);
       const connections = {}, port_directions = {};
-      for (const p of sym.pins) { connections[p.pid] = [pinBit(p.net)]; port_directions[p.pid] = p.pid === 'TN' ? 'output' : 'input'; }
+      for (const p of sym.pins) { connections[p.pid] = [pinBit(p.net)]; port_directions[p.pid] = p.position === 'bottom' ? 'output' : 'input'; }
       cells[id] = { type: id, connections, port_directions, attributes: {} };
     });
 

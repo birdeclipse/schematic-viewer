@@ -23,6 +23,9 @@ or right-click the file → *Open With…* → *Schematic Viewer*. The view foll
 
 Header controls: **Power** / **Ground** name lists (`VDD* VPWR`, `*` wildcard) override supply detection,
 `⏚` shows which nets the current cell treats as supplies, search jumps to a net or device, `f` fits to window.
+Drag a device (or port, or sub-circuit box) to place it by hand: it lands exactly where dropped, its supply stub
+comes along and the wires on its pins are re-routed to the new distance. Shift-drag instead re-lays out the whole
+cell with the device in its new row and order.
 
 ## Docs
 
@@ -36,6 +39,7 @@ Header controls: **Power** / **Ground** name lists (`VDD* VPWR`, `*` wildcard) o
 npm test
 ```
 
-Layout uses [netlistsvg](https://github.com/nturley/netlistsvg) and [elkjs](https://github.com/kieler/elkjs) (MIT, vendored).
+Layout uses [netlistsvg](https://github.com/nturley/netlistsvg) (MIT) and [elkjs](https://github.com/kieler/elkjs) (EPL-2.0), vendored;
+`vendor/netlistsvg.bundle.js` carries two marked one-line patches (see `docs/architecture.md`).
 Fixtures under `realworld/` are from [OpenRAM](https://github.com/VLSIDA/OpenRAM) (BSD-3) and the
 [SkyWater PDK](https://github.com/google/skywater-pdk) (Apache-2.0).

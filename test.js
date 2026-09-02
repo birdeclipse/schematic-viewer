@@ -3,7 +3,11 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 global.SPICE = require('./spice.js');
 global.XC = require('./xcouple.js');
+global.ELK = require('./vendor/elk.bundled.js');
+global.netlistsvg = require('./vendor/netlistsvg.bundle.js');
 const toYosys = require('./tojson.js');
+const LAYOUT = require('./layout.js');
+const SKIN = require('./skin.js');
 const EXAMPLES = require('./examples.js');
 
 const parse = k => SPICE.parse(EXAMPLES[k]);
@@ -77,10 +81,13 @@ test('cross-coupled cores: 6T cell, sense amp tail, DFF latches, level shifter',
     const def = nl.subckts[name.toLowerCase()];
     const c = toYosys(def, nl);
     const cells = c.json.modules[def.name].cells;
-    return { xc: Object.entries(cells).filter(([k]) => k.startsWith('xc')).map(([, v]) => Object.keys(v.connections).sort()), symbols: c.symbols, rest: Object.keys(cells).filter(k => !k.startsWith('lbl') && !k.startsWith('xc')) };
+    const railPin = /^[PN]\d\d$/;                                   // rail chain ends: one pin each, stubs added by ELK
+    const xcs = Object.entries(cells).filter(([k]) => k.startsWith('xc')).map(([, v]) => Object.keys(v.connections).sort());
+    return { xc: xcs.map(ps => ps.filter(p => !railPin.test(p))), pins: xcs, symbols: c.symbols, rest: Object.keys(cells).filter(k => !k.startsWith('lbl') && !k.startsWith('xc')) };
   };
   const sram = core(parse('sram6t'), 'SRAM6T');
-  assert.deepEqual(sram.xc, [[]]);                                 // BL/BLB ports and rails drawn inside
+  assert.deepEqual(sram.xc, [[]]);                                 // BL/BLB ports drawn inside
+  assert.deepEqual(sram.pins, [['N00', 'N10', 'P00', 'P10']]);     // one rail pin per chain end
   assert.match(sram.symbols[0], /class="flag" data-net="BLB"/);
   assert.deepEqual(sram.rest, []);
   assert.match(sram.symbols[0], /XPU0/);
@@ -203,6 +210,63 @@ MN1 VSS B n1 VSS nch
   assert.equal(cells.MN0.connections.D[0], cells.MP0.connections.D[0]);
 });
 
+test('orientation: pass devices put the signal source on top, so a tgate pair agrees', () => {
+  const nl = SPICE.parse(`
+.SUBCKT TG D0 S SB Z VDD VSS
+MP0 D0 SB Z VDD pch
+MN0 Z S D0 VSS nch
+MP1 n1 SB Z VDD pch
+MN1 Z S n1 VSS nch
+.ENDS`);
+  const cells = toYosys(nl.subckts.tg, nl).json.modules.TG.cells;
+  const top = c => c.type === 'pmos' ? c.connections.S[0] : c.connections.D[0];
+  assert.equal(top(cells.MP0), top(cells.MN0));                     // both show D0 on top
+  const port = Object.values(cells).find(c => c.type === 'port_in' && c.attributes.name === 'D0');
+  assert.equal(top(cells.MP0), port.connections.A[0]);
+  assert.equal(top(cells.MP1), top(cells.MN1));                     // internal n1 over output port Z
+  assert.notEqual(top(cells.MP1), Object.values(cells).find(c => c.type === 'port_out').connections.A[0]);
+});
+
+// Full pipeline through ELK: supplies line up across stages, PMOS under VDD, NMOS over VSS.
+const layout = async (key, name, moved) => {
+  const nl = SPICE.parse(EXAMPLES[key]);
+  const conv = toYosys(cell(nl, name), nl);
+  const skin = conv.symbols.length ? SKIN.replace('</svg>', conv.symbols.join('') + '</svg>') : SKIN;
+  const out = await LAYOUT.render(skin, conv, moved);
+  const cells = conv.json.modules[out.name].cells;
+  const nodes = Object.fromEntries(out.graph.children.map(n => [n.id, { ...n, type: cells[n.id]?.type }]));
+  const ys = t => new Set(Object.values(nodes).filter(n => n.type === t).map(n => n.y));
+  return { out, nodes, ys };
+};
+
+test('layout: every VDD stub shares one row and every VSS stub another; devices hug their rail', async () => {
+  for (const [key, name] of [['aoi21', 'AOI21'], ['levelshifter', 'LS'], ['powergate', 'GATED_INV'], ['sram6t', 'SRAM6T']]) {
+    const { nodes, ys } = await layout(key, name);
+    assert.equal(ys('vcc').size, 1, `${name}: VDD rows`);
+    assert.equal(ys('gnd').size, 1, `${name}: VSS rows`);
+    assert.ok([...ys('vcc')][0] < [...ys('gnd')][0], `${name}: VDD above VSS`);
+  }
+  const { nodes } = await layout('aoi21', 'AOI21');
+  assert.equal(nodes.MP0.y, nodes.MP1.y);                            // parallel PMOS on one row
+  assert.equal(nodes.MN2.y, nodes.MN1.y);                            // lone NMOS drops to the stack's last row
+  assert.ok(nodes.MN2.y > nodes.MN0.y);
+  assert.ok(nodes.MN1.y > nodes.MN0.y && nodes.MP2.y > nodes.MP0.y);  // series order preserved
+  assert.match(nodes.MP0.layoutOptions['org.eclipse.elk.alignment'], /TOP/);
+  assert.match(nodes.MN0.layoutOptions['org.eclipse.elk.alignment'], /BOTTOM/);
+});
+
+test('layout: moving a node re-lays out in the new order with its rail stub, rails still aligned', async () => {
+  const first = await layout('aoi21', 'AOI21');
+  assert.ok(first.nodes.MN2.x > first.nodes.MN0.x);
+  const second = await layout('aoi21', 'AOI21', { graph: first.out.graph, id: 'MN2', dx: -400, dy: 0 });
+  assert.ok(second.nodes.MN2.x < second.nodes.MN0.x, 'MN2 moved left of the stack');
+  assert.equal(second.ys('gnd').size, 1);
+  assert.equal(second.ys('vcc').size, 1);
+  const stub = Object.values(second.nodes).find(n => n.type === 'gnd' && n.x < second.nodes.MN0.x);
+  assert.ok(stub, 'a VSS stub followed MN2');
+  assert.ok(second.out.svg.includes('cell_MN2'));
+});
+
 test('port directions and labels: driven nets are outputs, pass-gate nets fall back to names', () => {
   const nl = SPICE.parse(EXAMPLES.mux2_tgate + EXAMPLES.nand2);
   const mux = toYosys(nl.subckts.mux2, nl);
@@ -244,13 +308,13 @@ test('cross-coupled cores: no false positives on inverter chains; open-ended and
   const sa = XC.find([mos('P1', 'q', 'qb', 'VDD', 'pmos'), mos('N1', 'q', 'qb', 't', 'nmos'), mos('P2', 'qb', 'q', 'VDD', 'pmos'), mos('N2', 'qb', 'q', 't', 'nmos'), mos('NF', 't', 'EN', 'VSS', 'nmos')], rail);
   assert.equal(sa[0].tail.nmos, 't');
   assert.ok(!sa[0].devices.some(m => m.i === 'NF'));
-  // dangling source (extraction artefact) still forms a core; drawn as an open stub
+  // dangling source (extraction artefact) still forms a core; rail and open chain ends are pins
   const open = XC.find([mos('P1', 'q', 'qb', 'VDD', 'pmos'), mos('P2', 'qb', 'q', 'float', 'pmos'), mos('N1', 'q', 'A', 'VSS', 'nmos'), mos('N2', 'qb', 'B', 'VSS', 'nmos')], rail);
   assert.equal(open.length, 1);
   const sym = XC.symbol(open[0], 'xc0', {}, () => null, rail);
-  assert.match(sym.svg, /data-net="float"/);
   assert.match(sym.svg, />A</);                                      // independent gate label
-  assert.deepEqual(sym.pins, []);
+  assert.deepEqual(sym.pins.map(p => [p.net, p.position, p.y]).sort(), [['VDD', 'top', 0], ['VSS', 'bottom', sym.H], ['VSS', 'bottom', sym.H], ['float', 'top', 0]]);
+  assert.ok(!/VDD/.test(sym.svg.replace(/data-net="[^"]*"/g, '')), 'no inline rail symbol');
 });
 
 test('rails: .global nets, clocks used as gates, nested switch demotion, override precedence', () => {

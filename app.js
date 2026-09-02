@@ -116,16 +116,107 @@
       tf.x = 20; tf.y = 20; tf.k = 1; apply();
       return;
     }
-    let skin = conv.hasMos ? SKIN : SKIN.replace('org.eclipse.elk.direction="DOWN"', 'org.eclipse.elk.direction="RIGHT"');
+    let skin = SKIN;
     if (conv.symbols.length) skin = skin.replace('</svg>', conv.symbols.join('') + '</svg>');
-    let svgText;
-    $('warnings').textContent = `Laying out ${def.name} (${def.instances.length} instances)…`;
-    try { svgText = await netlistsvg.render(skin, conv.json); }
-    catch (e) { $('warnings').textContent = `Render failed for ${def.name}: ${e.message}`; return; }
+    scene = { conv, skin, graph: null };
+    await draw();
+  }
+
+  // Lay out and draw the current cell. `moved` = {id, dx, dy}: re-run ELK around a dragged node.
+  let scene = null;   // { conv, skin, graph } of the drawn cell; graph = last ELK result
+  async function draw(moved) {
+    const { conv, skin } = scene;
+    $('warnings').textContent = `Laying out ${cur.name} (${cur.instances.length} instances)…`;
+    let out;
+    try { out = await LAYOUT.render(skin, conv, moved && { ...moved, graph: scene.graph }); }
+    catch (e) { $('warnings').textContent = `Render failed for ${cur.name}: ${e.message}`; return; }
+    scene.graph = out.graph;
     $('warnings').textContent = netlist.warnings.join('\n');
-    view.innerHTML = svgText;
+    view.innerHTML = out.svg;
     decorate(view.querySelector('svg'), conv);
-    fit();
+    if (pinned) setHL(`[data-net="${CSS.escape(pinned)}"]`, true);
+    if (!moved) fit();
+  }
+
+  // Drag a laid-out node (its rail stubs come along). The groups follow the pointer and every wire on their
+  // ports is re-routed as an orthogonal L/Z to its far anchor (a junction or another node's port), so a device
+  // pulled closer gets a shorter wire and stays exactly where dropped. Shift-drop instead asks ELK to re-lay
+  // out the cell with the node in its new row and order.
+  function grab(g, e) {
+    const id = g.id.slice(5);
+    const graph = scene?.graph;
+    if (!graph) return null;
+    const byId = Object.fromEntries(graph.children.map(n => [n.id, n]));
+    if (!byId[id]) return null;
+    const cells = scene.conv.json.modules[cur.name].cells;
+    const moving = LAYOUT.withStubs(graph, cells, id).map(k => byId[k]);
+    const groups = moving.map(n => [n, view.querySelector(`#cell_${CSS.escape(n.id)}`)]);
+    const key = (x, y) => `${Math.round(x)},${Math.round(y)}`;
+    const svg = view.querySelector('svg');
+    const at = {};                                          // wire endpoint -> lines touching it
+    for (const l of svg.querySelectorAll(':scope > line')) for (const [a, b] of [['x1', 'y1'], ['x2', 'y2']]) (at[key(+l.getAttribute(a), +l.getAttribute(b))] ??= []).push(l);
+    const stop = new Set([...svg.querySelectorAll(':scope > circle')].map(c => key(+c.getAttribute('cx'), +c.getAttribute('cy'))));   // junctions
+    const port = (n, p) => ({ x: n.x + p.x, y: n.y + p.y, vertical: p.y <= 0 || p.y >= n.height });
+    const own = new Set();
+    for (const n of moving) for (const p of n.ports || []) own.add(key(n.x + p.x, n.y + p.y));
+    for (const n of graph.children) if (!moving.includes(n)) for (const p of n.ports || []) stop.add(key(n.x + p.x, n.y + p.y));
+    const far = (l, x, y) => (Math.abs(+l.getAttribute('x1') - x) < 0.5 && Math.abs(+l.getAttribute('y1') - y) < 0.5) ? [+l.getAttribute('x2'), +l.getAttribute('y2')] : [+l.getAttribute('x1'), +l.getAttribute('y1')];
+    // Walk each wire from a moving port until a junction, a foreign port, or a fork.
+    const wires = [], seen = new Set();
+    for (const n of moving) for (const p of n.ports || []) {
+      const s = port(n, p);
+      for (const first of at[key(s.x, s.y)] || []) {
+        if (seen.has(first)) continue;
+        const lines = [first];
+        let [x, y] = far(first, s.x, s.y), last = first;
+        while (!stop.has(key(x, y)) && !own.has(key(x, y))) {
+          const next = (at[key(x, y)] || []).filter(l => l !== last);
+          if (next.length !== 1) break;
+          last = next[0]; lines.push(last); [x, y] = far(last, x, y);
+        }
+        lines.forEach(l => seen.add(l));
+        const vertical = Math.abs(+last.getAttribute('x1') - +last.getAttribute('x2')) < 0.5;
+        const pts = lines.map(l => ['x1', 'y1', 'x2', 'y2'].map(a => +l.getAttribute(a)));   // original geometry, for translating
+        wires.push({ s, a: { x, y, vertical }, both: own.has(key(x, y)), cls: first.getAttribute('class'), net: first.dataset.net, lines, pts, drawn: [] });
+      }
+    }
+    const route = ({ s, a, dx, dy }) => {                // start at the moved port, end at the anchor
+      const S = { x: s.x + dx, y: s.y + dy }, A = a;
+      const pts = s.vertical && a.vertical ? [S, { x: S.x, y: (S.y + A.y) / 2 }, { x: A.x, y: (S.y + A.y) / 2 }, A]
+        : !s.vertical && !a.vertical ? [S, { x: (S.x + A.x) / 2, y: S.y }, { x: (S.x + A.x) / 2, y: A.y }, A]
+        : s.vertical ? [S, { x: S.x, y: A.y }, A] : [S, { x: A.x, y: S.y }, A];
+      return pts.filter((p, i) => !i || p.x !== pts[i - 1].x || p.y !== pts[i - 1].y);
+    };
+    let dx = 0, dy = 0;
+    const touched = new Set(wires.filter(w => !w.both && scene.conv.wired.includes(w.net)).map(w => w.net));
+    const move = (mx, my) => {
+      dx = mx; dy = my;
+      for (const [n, el] of groups) el?.setAttribute('transform', `translate(${n.x + dx},${n.y + dy})`);
+      for (const w of wires) {
+        if (w.both) {                                    // stub wire: both ends move, keep its shape
+          w.lines.forEach((l, i) => { const [x1, y1, x2, y2] = w.pts[i]; l.setAttribute('x1', x1 + dx); l.setAttribute('y1', y1 + dy); l.setAttribute('x2', x2 + dx); l.setAttribute('y2', y2 + dy); });
+          continue;
+        }
+        w.lines.forEach(l => l.remove());
+        w.drawn.forEach(l => l.remove());
+        const pts = route({ ...w, dx, dy });
+        w.drawn = pts.slice(1).map((p, i) => {
+          const l = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+          l.setAttribute('x1', pts[i].x); l.setAttribute('y1', pts[i].y); l.setAttribute('x2', p.x); l.setAttribute('y2', p.y);
+          l.setAttribute('class', w.cls); l.dataset.net = w.net;
+          return svg.appendChild(l);
+        });
+      }
+      for (const net of touched) placeName(svg, net);
+    };
+    return {
+      x0: e.clientX, y0: e.clientY, move,
+      drop(shift) {
+        if (Math.hypot(dx, dy) <= 4) return;
+        if (shift) { draw({ id, dx, dy }); return; }
+        for (const n of moving) { n.x += dx; n.y += dy; }   // keep the graph honest for the next drag
+      },
+    };
   }
 
   function renderCrumbs() {
@@ -140,32 +231,34 @@
     });
   }
 
+  // Net-name text on the longest wire segment of a net (ports have flags already).
+  function placeName(svg, net) {
+    let s = null;
+    for (const l of svg.querySelectorAll(`:scope > line[data-net="${CSS.escape(net)}"]`)) {
+      const [x1, y1, x2, y2] = ['x1', 'y1', 'x2', 'y2'].map(a => +l.getAttribute(a));
+      const len = Math.abs(x2 - x1) + Math.abs(y2 - y1);
+      if (!s || len > s.len) s = { len, x1, y1, x2, y2 };
+    }
+    svg.querySelector(`text.netname[data-net="${CSS.escape(net)}"]`)?.remove();
+    if (!s || cur.ports.includes(net)) return;
+    const t = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+    const horiz = s.y1 === s.y2;
+    t.setAttribute('x', (s.x1 + s.x2) / 2 + (horiz ? 0 : 4));
+    t.setAttribute('y', (s.y1 + s.y2) / 2 + (horiz ? -3 : 3));
+    if (horiz) t.setAttribute('text-anchor', 'middle');
+    t.setAttribute('class', 'netname');
+    t.dataset.net = net;
+    t.textContent = net;
+    svg.appendChild(t);
+  }
+
   // Tag wires/labels/stubs with data-net, tag device groups with data-inst, add net-name text on shared wires.
   function decorate(svg, { bitNet, labelNet, wired }) {
-    const longest = {};
     for (const el of svg.querySelectorAll('[class*="net_"]')) {
       const m = /(?:^|\s)net_(\d+)/.exec(el.getAttribute('class'));
-      if (!m) continue;
-      const net = bitNet[m[1]];
-      el.dataset.net = net;
-      if (el.tagName !== 'line') continue;
-      const [x1, y1, x2, y2] = ['x1', 'y1', 'x2', 'y2'].map(a => +el.getAttribute(a));
-      const len = Math.abs(x2 - x1) + Math.abs(y2 - y1);
-      if (!longest[net] || len > longest[net].len) longest[net] = { len, x1, y1, x2, y2 };
+      if (m) el.dataset.net = bitNet[m[1]];
     }
-    for (const net of wired) {
-      const s = longest[net];
-      if (!s || cur.ports.includes(net)) continue;
-      const t = document.createElementNS('http://www.w3.org/2000/svg', 'text');
-      const horiz = s.y1 === s.y2;
-      t.setAttribute('x', (s.x1 + s.x2) / 2 + (horiz ? 0 : 4));
-      t.setAttribute('y', (s.y1 + s.y2) / 2 + (horiz ? -3 : 3));
-      if (horiz) t.setAttribute('text-anchor', 'middle');
-      t.setAttribute('class', 'netname');
-      t.dataset.net = net;
-      t.textContent = net;
-      svg.appendChild(t);
-    }
+    for (const net of wired) placeName(svg, net);
     for (const g of svg.querySelectorAll('g[id^="cell_"]')) {
       const key = g.id.slice(5);
       if (key in labelNet) { for (const c of g.querySelectorAll('*')) c.dataset.net = labelNet[key]; continue; }
@@ -252,10 +345,20 @@
   $('showgrid').onchange = e => canvas.classList.toggle('grid', e.target.checked);
   canvas.classList.toggle('grid', $('showgrid').checked);
   apply();
+  // Left-drag on a node moves it (see grab); anywhere else pans.
   let drag = null;
-  canvas.addEventListener('pointerdown', e => { if (e.button === 0 && !e.target.closest('#tools')) { drag = { x: e.clientX - tf.x, y: e.clientY - tf.y }; canvas.classList.add('drag'); } });
-  window.addEventListener('pointermove', e => { if (drag) { tf.x = e.clientX - drag.x; tf.y = e.clientY - drag.y; apply(); } });
-  window.addEventListener('pointerup', () => { drag = null; canvas.classList.remove('drag'); });
+  canvas.addEventListener('pointerdown', e => {
+    if (e.button !== 0 || e.target.closest('#tools')) return;
+    const node = e.target.closest('g[id^="cell_"]');
+    drag = (node && grab(node, e)) || { x: e.clientX - tf.x, y: e.clientY - tf.y };
+    canvas.classList.add('drag');
+  });
+  window.addEventListener('pointermove', e => {
+    if (!drag) return;
+    if (drag.move) drag.move((e.clientX - drag.x0) / tf.k, (e.clientY - drag.y0) / tf.k);
+    else { tf.x = e.clientX - drag.x; tf.y = e.clientY - drag.y; apply(); }
+  });
+  window.addEventListener('pointerup', e => { drag?.drop?.(e.shiftKey); drag = null; canvas.classList.remove('drag'); });
   window.addEventListener('resize', fit);
   window.addEventListener('keydown', e => { if (e.key === 'f' && e.target === document.body) fit(); });
 })();
